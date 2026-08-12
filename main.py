@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 from dotenv import load_dotenv
+from aiohttp import web
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
@@ -40,36 +41,42 @@ main_keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
+async def handle_health_check(request):
+    return web.Response(text="Bot runs smoothly!")
+
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get("/", handle_health_check)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 8080))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
 
 @dp.message(CommandStart())
 async def start_handler(message: types.Message):
     user_history[message.from_user.id] = []
-
     await message.answer(
-        "Salom! Men Ai botman,sizga qadey yordam kerak? ",
+        "Salom ! men Ai botman sizga qadey yordam kerak",
         reply_markup=main_keyboard
     )
-
 
 @dp.message(lambda msg: msg.text == "🖼 IT Live Rasmi")
 async def send_it_live_photo(message: types.Message):
     photo_url = "https://dummyimage.com/800x500/000000/ffffff.png&text=IT+LIVE"
     photo = URLInputFile(photo_url, filename="it_live.png")
-
     await message.answer_photo(
         photo=photo,
         caption="🖼 **IT Live Academy**",
         reply_markup=main_keyboard
     )
 
-
 @dp.message(lambda msg: msg.text == "ℹ️ Biz haqimizda")
 async def about_us_handler(message: types.Message):
     await message.answer(
-        'Salom bu bot sizni qiziqtirgan savolarga javob beradi.Bot ni "Oybekov Nurbek", yaratdi!',
+        'Salom! bu bot sizni qiziqtirgan savolar ga javob beradi, bu botni "Oybekov Nurbek" yaratdi! ',
         reply_markup=main_keyboard
     )
-
 
 @dp.message(lambda msg: msg.text == "📞 Aloqa va manzil")
 async def contact_handler(message: types.Message):
@@ -79,22 +86,19 @@ async def contact_handler(message: types.Message):
         reply_markup=main_keyboard
     )
 
-
 @dp.message()
 async def ai_chat_handler(message: types.Message):
     user_id = message.from_user.id
-
     if user_id not in user_history:
         user_history[user_id] = []
 
     user_history[user_id].append({"role": "user", "content": message.text})
-
     messages_to_send = [
-                           {
-                               "role": "system",
-                               "content": "Siz Guliston shahridagi IT Live Academy o'quv markazining aqlli va tezkor sun'iy intellekt yordamchisiz."
-                           }
-                       ] + user_history[user_id][-6:]
+        {
+            "role": "system",
+            "content": "Siz Guliston shahridagi IT Live Academy o'quv markazining aqlli va tezkor sun'iy intellekt yordamchisiz."
+        }
+    ] + user_history[user_id][-6:]
 
     try:
         completion = groq_client.chat.completions.create(
@@ -103,21 +107,17 @@ async def ai_chat_handler(message: types.Message):
             temperature=0.7,
             max_tokens=1000
         )
-
         ai_response = completion.choices[0].message.content
         user_history[user_id].append({"role": "assistant", "content": ai_response})
-
         await message.answer(ai_response, reply_markup=main_keyboard)
-
     except Exception as e:
         logging.error(f"Xatolik: {e}")
         await message.answer("⚠️ Xatolik yuz berdi. Qaytadan urinib ko'ring.", reply_markup=main_keyboard)
 
-
 async def main():
-    print("🚀 Bot ishga tushdi!")
+    await start_web_server()
+    print("🚀 Bot va Web Server ishga tushdi!")
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
